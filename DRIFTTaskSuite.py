@@ -85,25 +85,25 @@ class DRIFTTaskSuite(TaskSuite[Env]):
         }
         return {vector_id: vector.default for vector_id, vector in vectors.items()}
 
-    def functions_stack_trace_from_messages(
-        self,
-        messages: Sequence[ChatMessage],
-        ) -> list[FunctionCall]:
-        tool_calls = []
-        for message in messages:
-            if message["role"] == "assistant":
-                for tool_call in message["tool_calls"] or []:
-                    tool_calls.append(tool_call)
-        return tool_calls
+    # def functions_stack_trace_from_messages(
+    #     self,
+    #     messages: Sequence[ChatMessage],
+    #     ) -> list[FunctionCall]:
+    #     tool_calls = []
+    #     for message in messages:
+    #         if message["role"] == "assistant":
+    #             for tool_call in message["tool_calls"] or []:
+    #                 tool_calls.append(tool_call)
+    #     return tool_calls
 
 
     def model_output_from_messages(
         self,
         messages: Sequence[ChatMessage],
-        ) -> str | None:
+        ) -> list[MessageContentBlock] | None:
         if messages[-1]["role"] != "assistant":
             raise ValueError("Last message was not an assistant message")
-        return messages[-1]["content"]
+        return [{"type": "text", "content": messages[-1]["content"]}]
 
     def functions_call_format(self, messages):
         for message in messages:
@@ -192,7 +192,7 @@ class DRIFTTaskSuite(TaskSuite[Env]):
         if model_output is None:
             warnings.warn(f"Model output was None for task {user_task.ID}")
 
-        functions_stack_trace = self.functions_stack_trace_from_messages(messages)
+        functions_stack_trace = functions_stack_trace_from_messages(messages)
         utility = self._check_task_result(
             user_task,
             model_output or "",

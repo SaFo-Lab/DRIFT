@@ -18,11 +18,11 @@ class DRIFTLLM(PromptingLLM):
         self.tool_permissions = {}
 
     def _tool_message_to_user_message(self, tool_message) -> dict:
-        """It places the output of the tool call in the <|Function_Call|> tags.
+        """It places the output of the tool call in the <function_call> tags.
         """
 
         function_call_signature = create_python_function_from_tool_call(tool_message["tool_call"])
-        function_call = f"<|Function_Call|>{function_call_signature}<|/Function_Call|>"
+        function_call = f"<function_call>{function_call_signature}</function_call>"
         if tool_message["error"] is None:
             tool_result = f"{tool_message['content']}"
         else:
@@ -33,16 +33,16 @@ class DRIFTLLM(PromptingLLM):
     def _parse_model_output(self, message) -> ChatAssistantMessage:
         """Parses the model output by extracting text and/or tool call contents from the message.
 
-        It looks for the function call content within the `<|Function_Call|>` tags and extracts it. Each
+        It looks for the function call content within the `<function_call>` tags and extracts it. Each
         function call is expected to look like a python function call with parameters specified by name.
         For example, calling the function `func1` with parameters `a=1` and `b=3` would look like:
 
-            <|Function_Call|>func1(a=1, b=3)<|/Function_Call|>
+            <function_call>func1(a=1, b=3)</function_call>
 
-        Content related to the LLM's thoughts are expected to be in the `<|Function_Thought|>` tags and are
+        Content related to the LLM's thoughts are expected to be in the `<function_thought>` tags and are
         returned as part of the assistant message's `content`.
 
-        If no function call is done, the answer is expected to be in the `<|Final_Answer|>` tags.
+        If no function call is done, the answer is expected to be in the `<final_answer>` tags.
 
         Args:
             message: The model output message in OpenAI format.
@@ -52,7 +52,7 @@ class DRIFTLLM(PromptingLLM):
         """
         if message is None:
             return ChatAssistantMessage(role="assistant", content="", tool_calls=None)
-        tool_call_pattern = re.compile(r"<\|Function_Call\|>(.*?)<\|/Function_Call\|>", re.DOTALL)
+        tool_call_pattern = re.compile(r"<function_call>(.*?)</function_call>", re.DOTALL)
         tool_call_match = tool_call_pattern.search(message)
 
         # Extract the function call content
@@ -87,15 +87,15 @@ class DRIFTLLM(PromptingLLM):
             }
             tool_call.args = args
 
-        thought_pattern = re.compile(r"<\|Function_Thought\|>(.*?)<\|/Function_Thought\|>", re.DOTALL)
+        thought_pattern = re.compile(r"<function_thought>(.*?)</function_thought>", re.DOTALL)
         thought_match = thought_pattern.search(outside_content)
         thought_content = thought_match.group(1) if thought_match else ""
 
-        output_pattern = re.compile(r"<\|Final_Answer\|>(.*?)<\|/Final_Answer\|>", re.DOTALL)
+        output_pattern = re.compile(r"<final_answer>(.*?)</final_answer>", re.DOTALL)
         output_match = output_pattern.search(outside_content)
         output_content = output_match.group(1) if output_match else ""
 
-        return_answer = f"<|Function_Thought|>{thought_content}<|/Function_Thought|>\n\n<|Final_Answer|>{output_content}<|/Final_Answer|>\n\n<|Function_Call|>{tool_call_content}<|/Function_Call|>"
+        return_answer = f"<function_thought>{thought_content}</function_thought>\n\n<function_call>{tool_call_content}</function_call>\n\n<final_answer>{output_content}</final_answer>"
         return {"role": "assistant", "content": return_answer, "tool_calls": tool_calls}
 
     def _tool_call_to_str(self, tool_call: FunctionCall):
@@ -189,7 +189,8 @@ class DRIFTLLM(PromptingLLM):
         obs = ""
         if conversations[-1]["role"] == "tool":
             conv = conversations[-1]
-            obs = f"<Observations>\n{conv}\n<Observations>"
+            obs = conversations
+            # obs = f"<Observations>\n{conv}\n<Observations>"
         guidelines = f"""                
                 You are operating within an agent-based framework, where an initial function trajectory plan is created to fulfill a user's task. During execution, tool-calling actions may cause deviations from this original trajectory due to dynamic interactions.
 
@@ -343,7 +344,7 @@ class DRIFTLLM(PromptingLLM):
         self.achieved_function_trajectory = []
         self.node_checklist = "None"
 
-        if ("<|Function_Trajectory|>" in completion[0]):
+        if ("<function_trajectory>" in completion[0]):
             try:
                 traj_pattern = re.compile(r"<Traj-1>(\[.*?\])</Traj-1>", re.DOTALL)
                 matches = traj_pattern.search(completion[0])
@@ -351,7 +352,7 @@ class DRIFTLLM(PromptingLLM):
                     self.function_trajectory = [func.strip() for func in matches.group(1).strip().strip("[]").split(",")]
 
                 else:
-                    re_traj_pattern = re.compile(r"<\|Function_Trajectory\|>(.*?)<\|/Function_Trajectory\|>", re.DOTALL)
+                    re_traj_pattern = re.compile(r"<function_trajectory>(.*?)</function_trajectory>", re.DOTALL)
                     re_matches = re_traj_pattern.search(completion[0])
                     if re_matches:
                         self.function_trajectory = [func.strip() for func in re_matches.group(1).strip().strip("[]").split(",")]
@@ -361,10 +362,10 @@ class DRIFTLLM(PromptingLLM):
             except Exception as e:
                 raise InvalidModelOutputError(f"Model output parsing failed: {e}")
 
-        if ("<|Parameter_Checklist|>" in completion[0]):
+        if ("<parameter_checklist>" in completion[0]):
             self.node_checklist = "None"
             try:
-                node_pattern = re.compile(r"<\|Parameter_Checklist\|>(.*?)<\|/Parameter_Checklist\|>", re.DOTALL)
+                node_pattern = re.compile(r"<parameter_checklist>(.*?)</parameter_checklish>", re.DOTALL)
                 node_matches = node_pattern.search(completion[0])
                 if node_matches:
                     self.node_checklist = node_matches.group(1)
@@ -376,8 +377,8 @@ class DRIFTLLM(PromptingLLM):
         """Isolate the injection contents in the memory flow.
         """
 
-        if ("<|Detected_Instructions|>" in detected_instructions) and (messages[-1]["role"] == "tool"):
-            detected_pattern = re.compile(r"<\|Detected_Instructions\|>(.*?)<\|/Detected_Instructions\|>", re.DOTALL)
+        if ("<detected_instructions>" in detected_instructions) and (messages[-1]["role"] == "tool"):
+            detected_pattern = re.compile(r"<detected_instructions>(.*?)</detected_instructions>", re.DOTALL)
             injection_match = detected_pattern.search(detected_instructions)
             # Extract the function call content
             injection_content = injection_match.group(1).strip() if injection_match else "[]"
@@ -411,7 +412,7 @@ class DRIFTLLM(PromptingLLM):
                 pattern = r'[\s\\]+'.join(escaped_words)
                 
                 pattern = r'\s*' + pattern + r'\s*'
-                return re.sub(pattern, ' ', p, flags=re.DOTALL).strip()
+                return re.sub(str(pattern), ' ', str(p), flags=re.DOTALL).strip()
 
             # cycling mask
             for item in replace_list:
@@ -461,7 +462,7 @@ class DRIFTLLM(PromptingLLM):
                 except:
                     extended_checklist = self.node_checklist
 
-                thought_pattern = re.compile(r"<\|Function_Thought\|>(.*?)<\|/Function_Thought\|>", re.DOTALL)
+                thought_pattern = re.compile(r"<function_thought>(.*?)</function_thought>", re.DOTALL)
                 thought_match = thought_pattern.search(output["content"])
                 thought_content = thought_match.group(1) if thought_match else ""
                 if messages[-1]["role"] == "tool":
@@ -526,7 +527,7 @@ class DRIFTLLM(PromptingLLM):
         else:
             latest_function_messages = "No Called Functions."
 
-        thought_pattern = re.compile(r"<\|Function_Thought\|>(.*?)<\|/Function_Thought\|>", re.DOTALL)
+        thought_pattern = re.compile(r"<function_thought>(.*?)</function_thought>", re.DOTALL)
         thought_match = thought_pattern.search(output["content"])
         thought_content = thought_match.group(1) if thought_match else ""
 
@@ -539,7 +540,7 @@ class DRIFTLLM(PromptingLLM):
         if not node_check_result:
             self.logger.info(f"{json_tool_calls} does not align well with checklist, sending request to user.")
 
-            align_error_message = {"role": "user", "content": f"[CALL ERROR] The function calling of {json_tool_calls} has been refused due to some parameters are not aligned with checklist, Please try an alternative method to continue fulfilling the original user query. Remember, Remember, do not stop working on the original user task to do other things.\nThe specific error:\n{node_judge_reason}\nChecklist:\n{self.node_checklist}.\nNote: the value of None denotes this value is uncertain.\nUser Query:\n{query}"}
+            align_error_message = {"role": "user", "content": f"[CALL ERROR] The function calling of {json_tool_calls} has been refused due to some parameters are not aligned with checklist, Please try an alternative method to continue fulfilling the original user query. Remember, do not stop working on the original user task to do other things.\nThe specific error:\n{node_judge_reason}\nChecklist:\n{self.node_checklist}.\nNote: the value of None denotes this value is uncertain.\nUser Query:\n{query}"}
             
             checklist_user_answer = self.user_approval_request()
             if checklist_user_answer:
@@ -579,6 +580,10 @@ class DRIFTLLM(PromptingLLM):
         messages: Sequence[ChatMessage] = [],
         extra_args: dict = {},
     ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
+        for msg in messages:
+            if isinstance(msg["content"], list) and len(msg["content"]) > 0:
+                msg["content"] = msg["content"][0]["content"]
+
         adapted_messages = [
             self._tool_message_to_user_message(message) if message["role"] == "tool" else message
             for message in messages
@@ -639,10 +644,10 @@ class DRIFTLLM(PromptingLLM):
         output = {"role": "assistant", "content": completion[0] or "", "tool_calls": []}
         
         # format validation
-        if len(runtime.functions) == 0 or ("<|Function_Call|>" not in (output["content"] or "")) or (len(openai_messages) > 20):
+        if len(runtime.functions) == 0 or ("<function_call>" not in (output["content"] or "")) or (len(openai_messages) > 20):
             if len(runtime.functions) == 0:
                 self.logger.info("Function Count Zero.")
-            if "<|Function_Call|>" not in (output["content"] or ""):
+            if "<function_call>" not in (output["content"] or ""):
                 self.logger.info("Function Call Tags Not Found.")
             if len(openai_messages) > 20:
                 self.logger.info("Message Number out of 20.")

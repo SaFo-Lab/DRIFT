@@ -1,4 +1,3 @@
-import torch
 import argparse
 import random
 import numpy as np
@@ -7,11 +6,6 @@ import logging
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    torch.manual_seed(seed)
     return seed
 
 def get_logger(filename=None):
@@ -32,7 +26,8 @@ def get_args(description='DRIFT'):
     # Eval Setting
     parser.add_argument('--benchmark_version', type=str, default='v1.2', help='the version of agentdojo')
     parser.add_argument('--model', type=str, default='gpt-4o-mini-2024-07-18', help='gpt-4o-mini, gpt-4o')
-    parser.add_argument("--suites", type=str, default="banking,slack,travel,workspace", help="which suites to use, separated by comma.")
+    parser.add_argument("--suites", type=str, default="banking,slack,travel,workspace,helpfulness", help="which suites to use, separated by comma.")
+    parser.add_argument('--force_rerun', action='store_true', help='Whether to force rerun.')
     parser.add_argument('--do_attack', action='store_true', help='Whether the setting is under attack.')
     parser.add_argument('--attack_type', type=str, default="important_instructions", help='The attack type, you can select from "direct, ignore_previous, system_message, injecagent, dos, swearwords_dos, captcha_dos, offensive_email_dos, felony_dos, important_instructions, important_instructions_no_user_name, important_instructions_no_model_name, important_instructions_no_names, important_instructions_wrong_model_name, important_instructions_wrong_user_name, tool_knowledge"')
 

@@ -1,4 +1,5 @@
-from client import OpenAIModel
+import time
+from client import OpenAIModel, OpenRouterModel, GoogleModel
 
 from import_lib import *
 from utils import get_args, set_seed, get_logger
@@ -13,7 +14,11 @@ def main(args, suite_type):
     suites = (suite_type,) # banking, slack, travel, workspace
 
     model_name = args.model
-    output_name = f"{model_name}/{suites[0]}"
+    if args.injection_isolation:
+        output_name = f"{model_name}-injection/{suites[0]}"
+    else:
+        output_name = f"{model_name}/{suites[0]}"
+
     output_dir = os.path.join("runs", output_name)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -24,11 +29,13 @@ def main(args, suite_type):
     else:
         attacker = None
 
-    if attacker is not None:
-        save_dir = os.path.join(output_dir, attacker)
+    # if attacker is not None:
+    #     save_dir = os.path.join(output_dir, attacker)
     
-    else:
-        save_dir = os.path.join(output_dir, "user_task")
+    # else:
+    #     save_dir = os.path.join(output_dir, "user_task")
+
+    save_dir = output_dir
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir, exist_ok=True)
@@ -41,10 +48,19 @@ def main(args, suite_type):
 
     if model_name.startswith("gpt-"):
         client = OpenAIModel(model=args.model, logger=logger)
-        tools_pipeline_name = "gpt-4o-2024-05-13"
+        tools_pipeline_name = args.model
+        logger.info(f"Using OpenAI Client: {args.model}")
+
+    elif model_name.startswith("gemini-"):
+        client = GoogleModel(model=args.model, logger=logger)
+        tools_pipeline_name = args.model
+        logger.info(f"Using Google Client: {args.model}")
 
     else:
-        raise ValueError("Invalid model name.")
+        client = OpenRouterModel(model=args.model, logger=logger)
+        tools_pipeline_name = args.model
+        logger.info(f"Using OpenRouter Client: {args.model}")
+        # raise ValueError("Invalid model name.")
 
     llm = DRIFTLLM(args, client, logger=logger)
 
@@ -114,17 +130,38 @@ def main(args, suite_type):
             for injec_idx, injection_task_id in enumerate(injection_tasks_to_run):
                 match = re.fullmatch(r'injection_task_(\d+)', injection_task_id)
                 injection_task_idx = int(match.group(1))
+                pre_total_tokens = llm.client.total_tokens
+
+                result_file_path = Path(save_dir) / f"user_task_{user_task_idx}" / attacker / f"injection_task_{injection_task_idx}.json"
+                result_file_path.parent.mkdir(parents=True, exist_ok=True)
+                if not args.force_rerun and os.path.exists(result_file_path):
+                    try:
+                        with open(result_file_path, "r", encoding="utf-8") as f:
+                            loaded_result = json.load(f)
+                            if "utility" in loaded_result and "security" in loaded_result:
+                                utility_result.append(loaded_result["utility"])
+                                security_result.append(loaded_result["security"])
+                                logger.info(f"user_task_{user_task_idx} with injection_task_{injection_task_idx} result already exists; skipping run.\nAttack Success Ratio: {security_result.count(True) + resume_security} / {len(security_result) + resume_total}\nUtility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
+                                continue
+
+                    except Exception as e:
+                        logger.info(f"Loading existing result file at {result_file_path} failed: {e}. The task will be re-run.")
+                        logger.info(f"Re-runing user_task_{user_task_idx}-injection_task_{injection_task_idx} ...")
+
+
                 injection_task = suite.get_injection_task_by_id(injection_task_id)
                 task_injections = attack.attack(user_task, injection_task)
 
+                start_time = time.time()
                 utility, security, messages = task_suite.run_task_with_pipeline(tools_pipeline, user_task, injection_task, task_injections)
+                end_time = time.time()
                 utility_result.append(utility)
                 security_result.append(security)
-                with open(os.path.join(save_dir, f"UserTask{user_task_idx}-InjectionTask{injection_task_idx}.json"), "w") as f:
-                    json.dump({"conversations": messages, "utility": utility, "security": security}, f, indent=4)
+                with open(result_file_path, "w") as f:
+                    json.dump({"suite_name": suite_type, "pipeline_name": f"{args.model}", "user_task_id": f"user_task_{user_task_idx}", "injection_task_id": f"injection_task_{injection_task_idx}", "attack_type": f"{attacker}", "build_constraints": args.build_constraints, "injection_isolation": args.injection_isolation, "dynamic_validation": args.dynamic_validation, "adaptive_attack": args.adaptive_attack, "tool_permission": llm.tool_permissions, "initial_trajectory": llm.function_trajectory, "initial_checklist": llm.node_checklist, "conversations": messages, "benchmark_version": args.benchmark_version, "utility": utility, "security": security, "total_tokens": llm.client.total_tokens - pre_total_tokens, "duration": end_time - start_time}, f, indent=4)
 
-                logger.info(f"Task-{user_task_idx} with injection-{injection_task_idx} Utility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
-                logger.info(f"Task-{user_task_idx} with injection-{injection_task_idx} Attack Success Ratio: {security_result.count(True) + resume_security} / {len(security_result) + resume_total}")
+                logger.info(f"user_task_{user_task_idx} with injection_task_{injection_task_idx} Utility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
+                logger.info(f"user_task_{user_task_idx} with injection_task_{injection_task_idx} Attack Success Ratio: {security_result.count(True) + resume_security} / {len(security_result) + resume_total}")
 
     else:
         logger.info("Evaluating on User Tasks.")
@@ -132,12 +169,34 @@ def main(args, suite_type):
             user_task_name = user_task.ID
             match = re.fullmatch(r'user_task_(\d+)', user_task_name)
             user_task_idx = int(match.group(1))
+            pre_total_tokens = llm.client.total_tokens
+            
+            result_file_path = Path(save_dir) / f"user_task_{user_task_idx}" / "none" / f"none.json"
+            result_file_path.parent.mkdir(parents=True, exist_ok=True)
+            if not args.force_rerun and os.path.exists(result_file_path):
+                try:
+                    with open(result_file_path, "r", encoding="utf-8") as f:
+                        loaded_result = json.load(f)
+                        if "utility" in loaded_result and "security" in loaded_result:
+                            utility_result.append(loaded_result["utility"])
+                            security_result.append(loaded_result["security"])
+                            logger.info(f"user_task_{user_task_idx} result already exists; skipping run.\nAttack Success Ratio: {security_result.count(True) + resume_security} / {len(security_result) + resume_total}\nUtility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
+                            continue
+
+                except Exception as e:
+                    logger.info(f"Loading existing result file at {result_file_path} failed: {e}. The task will be re-run.")
+                    logger.info(f"Re-runing user_task_{user_task_idx} ...")
+
+
+            start_time = time.time()
             utility, security, messages = task_suite.run_task_with_pipeline(tools_pipeline, user_task, injection_task=None, injections={})
+            end_time = time.time()
             utility_result.append(utility)
             security_result.append(security)
-            with open(os.path.join(save_dir, f"UserTask{user_task_idx}.json"), "w") as f:
-                json.dump({"conversations": messages, "utility": utility, "security": security}, f, indent=4)
-            logger.info(f"Task-{user_task_idx} Utility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
+            with open(result_file_path, "w") as f:
+                json.dump({"suite_name": suite_type, "pipeline_name": f"{args.model}", "user_task_id": f"user_task_{user_task_idx}", "injection_task_id": None, "attack_type": None, "build_constraints": args.build_constraints, "injection_isolation": args.injection_isolation, "dynamic_validation": args.dynamic_validation, "adaptive_attack": args.adaptive_attack, "tool_permission": llm.tool_permissions, "initial_trajectory": llm.function_trajectory, "initial_checklist": llm.node_checklist, "conversations": messages, "benchmark_version": args.benchmark_version, "utility": utility, "security": security, "total_tokens": llm.client.total_tokens - pre_total_tokens, "duration": end_time - start_time}, f, indent=4)
+
+                logger.info(f"user_task_{user_task_idx} Utility Success Ratio: {utility_result.count(True) + resume_utility} / {len(utility_result) + resume_total}")
 
     logger.info(f"Overall Utility Success Ratio: {(utility_result.count(True) + resume_utility) / (len(utility_result) + resume_total)}")
     logger.info(f"Overall Attack Success Ratio: {(security_result.count(True) + resume_security) / (len(security_result) + resume_total)}")
@@ -149,8 +208,6 @@ if __name__ == "__main__":
     suites = args.suites.split(",")
     for suite_type in suites:
         main(args, suite_type)
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
 
 
     

@@ -8,18 +8,28 @@
 
 The official implementation of NeurIPS 2025 paper "[DRIFT: Dynamic Rule-Based Defense with Injection Isolation for Securing LLM Agents](https://www.arxiv.org/pdf/2506.12104)".
 
+## Update
+[2026.1.30] 🛠️ Support the evaluation on more agents.
+[2026.1.30] 🛠️ Update the evaluation code on ASB.
+
+
 ## How to Start
-We provide the evaluation of DRIFT on GPT-4o-mini and GPT-4o, **full code (including other models) will be released later**, you can reproduce the results following:
+We provide the evaluation of DRIFT, you can reproduce the results following:
 
 ### Construct Your Environment
+Python version == 3.11
 ```bash
-pip install "agentdojo==0.1.26"
+pip install "agentdojo==0.1.35"
 pip install -r requirements.txt
 ```
 
-### Set Your OPENAI API KEY
+### Set Your API KEY
+We provide three API providers, including OpenAI, Google, and OpenRouter. Please set up the API Key as you need.
+
 ```bash
 export OPENAI_API_KEY=your_key
+export GOOGLE_API_KEY=your_key
+export OPENROUTER_API_KEY=your_key
 ```
 
 ### run task with no attack
@@ -37,7 +47,11 @@ python pipeline_main.py \
 --build_constraints --injection_isolation --dynamic_validation
 ```
 
-If you want to evaluate under adaptive attack, add configure of ```--adaptive_attack```.
+You can evaluate any model from the supported providers by passing its model identifier (eg., gemini-2.5-pro) to the `--model` flag. To evaluate under an adaptive attack, include the `--adaptive_attack` configuration.
+
+
+### Evaluating on ASB
+Please refer to `ASB_DRIFT/README.md`.
 
 ## References
 

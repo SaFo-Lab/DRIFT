@@ -1,7 +1,6 @@
 import os
 import re
 import ast
-import torch
 import yaml
 import copy
 import json
@@ -27,7 +26,7 @@ from openai.types.chat import (
 )
 
 from agentdojo.task_suite.load_suites import get_suite, get_suites
-from agentdojo.task_suite.task_suite import TaskSuite
+from agentdojo.task_suite.task_suite import TaskSuite, model_output_from_messages, functions_stack_trace_from_messages
 from collections import defaultdict
 
 from pathlib import Path
@@ -60,3 +59,5 @@ from agentdojo.agent_pipeline import (
 )
 from agentdojo.agent_pipeline.llms.prompting_llm import InvalidModelOutputError
 from agentdojo.functions_runtime import FunctionsRuntime
+
+from agentdojo.types import ChatMessage, MessageContentBlock, get_text_content_as_str
