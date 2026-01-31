@@ -9,8 +9,8 @@
 The official implementation of NeurIPS 2025 paper "[DRIFT: Dynamic Rule-Based Defense with Injection Isolation for Securing LLM Agents](https://www.arxiv.org/pdf/2506.12104)".
 
 ## Update
-[2026.1.30] 🛠️ Support the evaluation on more agents.
-[2026.1.30] 🛠️ Update the evaluation code on ASB.
+- [2026.1.30] 🛠️ Support the evaluation on more agents.
+- [2026.1.30] 🛠️ Update the evaluation code on ASB.
 
 
 ## How to Start
