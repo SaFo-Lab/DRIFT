@@ -17,8 +17,10 @@ The official implementation of NeurIPS 2025 paper "[DRIFT: Dynamic Rule-Based De
 We provide the evaluation of DRIFT, you can reproduce the results following:
 
 ### Construct Your Environment
-Python version == 3.11
+
 ```bash
+conda create -n drift python=3.11
+source activate drift
 pip install "agentdojo==0.1.35"
 pip install -r requirements.txt
 ```
