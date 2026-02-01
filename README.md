@@ -55,6 +55,11 @@ You can evaluate any model from the supported providers by passing its model ide
 ### Evaluating on ASB
 Please refer to `ASB_DRIFT/README.md`.
 
+
+### Inspect Results
+You can find the cached results in `runs/`.
+
+
 ## References
 
 If you find this work useful in your research or applications, we appreciate that if you can kindly cite:

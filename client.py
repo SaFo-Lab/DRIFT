@@ -6,7 +6,7 @@ from typing import Sequence, Optional
 from google import genai
 from google.genai import types as genai_types
 
-from openai import OpenAI, AzureOpenAI
+from openai import OpenAI
 
 from prompts import EXECUTION_GUIDELINES_PROMPT
 

@@ -14,10 +14,8 @@ def main(args, suite_type):
     suites = (suite_type,) # banking, slack, travel, workspace
 
     model_name = args.model
-    if args.injection_isolation:
-        output_name = f"{model_name}-injection/{suites[0]}"
-    else:
-        output_name = f"{model_name}/{suites[0]}"
+
+    output_name = f"{model_name}/{suites[0]}"
 
     output_dir = os.path.join("runs", output_name)
     if not os.path.exists(output_dir):
