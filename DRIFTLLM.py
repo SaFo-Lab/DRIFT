@@ -13,8 +13,10 @@ class DRIFTLLM(PromptingLLM):
         self.target_agent_name = "gpt"
         self.target_tool_name = "observation"
         self.function_trajectory = []
+        self.initial_function_trajectory = []
         self.achieved_function_trajectory = []
         self.node_checklist = "None"
+        self.initial_node_checklist = "None"
         self.tool_permissions = {}
 
     def _tool_message_to_user_message(self, tool_message) -> dict:
@@ -218,7 +220,6 @@ class DRIFTLLM(PromptingLLM):
                 <Initial_Function_Trajectory>\n{function_trajectory}\n</Initial_Function_Trajectory>
                 <Current_Function_Trajectory>\n{current_function_trajectory}\n</Current_Function_Trajectory>
                 <User_Query>\n{query}\n</User_Query>
-                {obs}
                 """
 
         answer = self.client.llm_run(guidelines, data)
@@ -359,6 +360,8 @@ class DRIFTLLM(PromptingLLM):
                     else:
                         self.logger.info("No formatted Trajectory.")
 
+                self.initial_function_trajectory = self.function_trajectory
+
             except Exception as e:
                 raise InvalidModelOutputError(f"Model output parsing failed: {e}")
 
@@ -369,6 +372,8 @@ class DRIFTLLM(PromptingLLM):
                 node_matches = node_pattern.search(completion[0])
                 if node_matches:
                     self.node_checklist = node_matches.group(1)
+
+                self.initial_node_checklist = self.node_checklist
 
             except Exception as e:
                 raise InvalidModelOutputError(f"Parameter Checklist Generation Failed: {e}")
