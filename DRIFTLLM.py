@@ -201,10 +201,9 @@ class DRIFTLLM(PromptingLLM):
                 1. Initial_Function_Trajectory: The initial planned function trajectory.
                 2. Current_Function_Trajectory: The current function trajectory.
                 3. User_Query: The original query from the user.
-                4. Lateset_Observations: The latest observations from tool.
 
                 ## Task Guidelines
-                Your task is to analyze the User Query, History_Conversations to assess whether the deviation from the initial function trajectory still aligns with achieving the original user task.
+                Your task is to analyze the User Query and current function trajectory to assess whether the deviation from the initial function trajectory still aligns with achieving the original user task.
 
                 ## Response Guidelines
                 Respond with Yes if the current trajectory is still working toward the original user task.
@@ -368,7 +367,7 @@ class DRIFTLLM(PromptingLLM):
         if ("<parameter_checklist>" in completion[0]):
             self.node_checklist = "None"
             try:
-                node_pattern = re.compile(r"<parameter_checklist>(.*?)</parameter_checklish>", re.DOTALL)
+                node_pattern = re.compile(r"<parameter_checklist>(.*?)</parameter_checklist>", re.DOTALL)
                 node_matches = node_pattern.search(completion[0])
                 if node_matches:
                     self.node_checklist = node_matches.group(1)
