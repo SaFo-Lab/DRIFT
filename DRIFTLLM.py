@@ -377,11 +377,11 @@ class DRIFTLLM(PromptingLLM):
             except Exception as e:
                 raise InvalidModelOutputError(f"Parameter Checklist Generation Failed: {e}")
 
-    def injection_isolate(self, detected_instructions, messages, openai_messages):
+    def injection_isolate(self, detected_instructions, messages, openai_messages, msg_index=-1):
         """Isolate the injection contents in the memory flow.
         """
 
-        if ("<detected_instructions>" in detected_instructions) and (messages[-1]["role"] == "tool"):
+        if ("<detected_instructions>" in detected_instructions) and (messages[msg_index]["role"] == "tool"):
             detected_pattern = re.compile(r"<detected_instructions>(.*?)</detected_instructions>", re.DOTALL)
             injection_match = detected_pattern.search(detected_instructions)
             # Extract the function call content
@@ -396,8 +396,8 @@ class DRIFTLLM(PromptingLLM):
             except:
                 replace_list = []
 
-            length = len(openai_messages[-1]["content"])
-            returned_message = copy.deepcopy(messages[-1]["content"])
+            length = len(openai_messages[msg_index]["content"])
+            returned_message = copy.deepcopy(messages[msg_index]["content"])
 
             self.logger.info(f"Returned Messages: {returned_message}")
             self.logger.info(f"Detected Instructions: {replace_list}")
@@ -420,15 +420,15 @@ class DRIFTLLM(PromptingLLM):
 
             # cycling mask
             for item in replace_list:
-                messages[-1]["content"] = remove_sentence(messages[-1]["content"], item)
-                openai_messages[-1]["content"] = remove_sentence(openai_messages[-1]["content"], item)
+                messages[msg_index]["content"] = remove_sentence(messages[msg_index]["content"], item)
+                openai_messages[msg_index]["content"] = remove_sentence(openai_messages[msg_index]["content"], item)
 
-            if len(openai_messages[-1]["content"]) == length:
+            if len(openai_messages[msg_index]["content"]) == length:
                 for item in replace_list:
-                    messages[-1]["content"] = remove_sentence(messages[-1]["content"], item)
-                    openai_messages[-1]["content"] = remove_sentence(openai_messages[-1]["content"], item)
+                    messages[msg_index]["content"] = remove_sentence(messages[msg_index]["content"], item)
+                    openai_messages[msg_index]["content"] = remove_sentence(openai_messages[msg_index]["content"], item)
 
-            if len(openai_messages[-1]["content"]) == length:
+            if len(openai_messages[msg_index]["content"]) == length:
                 return False, messages, openai_messages
 
             else:
@@ -613,26 +613,37 @@ class DRIFTLLM(PromptingLLM):
 
         # Injection Detection
         if self.args.injection_isolation:
-            if messages[-1]["role"] == "tool":
+            if messages and messages[-1]["role"] == "tool":
                 self.logger.info("Injection Detecting ...")
                 system_message = INJECTION_DETECTION_PROMPT
-                obs = messages[-1]
-                user_prompt = f"""<User Query>\n{query}\n</User Query>
-                <Tool Results>\n{obs}\n</Tool Results>"""
                 openai_messages = [{"role": "system", "content": system_message}, *openai_messages]
 
-                detected_instructions = self.client.llm_run(system_message, user_prompt)
+                first_tool_idx = len(messages)
+                while first_tool_idx > 0 and messages[first_tool_idx - 1]["role"] == "tool":
+                    first_tool_idx -= 1
 
-                cycle_times = 0
-                injection_completion_mark, messages, openai_messages = self.injection_isolate(detected_instructions, messages, openai_messages)
-                # cycling mask
-                while (not injection_completion_mark) and (cycle_times < self.mask_limitation):
-                    cycle_times += 1
-                    obs = messages[-1]
+                for msg_index in range(first_tool_idx - len(messages), 0):
+                    if not str(openai_messages[msg_index].get("content") or "").strip():
+                        continue
+                    obs = messages[msg_index]
                     user_prompt = f"""<User Query>\n{query}\n</User Query>
-                    <Tool Results>\n{obs}\n</Tool Results>"""
+                <Tool Results>\n{obs}\n</Tool Results>"""
                     detected_instructions = self.client.llm_run(system_message, user_prompt)
-                    injection_completion_mark, messages, openai_messages = self.injection_isolate(detected_instructions, messages, openai_messages)
+
+                    cycle_times = 0
+                    injection_completion_mark, messages, openai_messages = self.injection_isolate(
+                        detected_instructions, messages, openai_messages, msg_index=msg_index
+                    )
+                    # cycling mask
+                    while (not injection_completion_mark) and (cycle_times < self.mask_limitation):
+                        cycle_times += 1
+                        obs = messages[msg_index]
+                        user_prompt = f"""<User Query>\n{query}\n</User Query>
+                    <Tool Results>\n{obs}\n</Tool Results>"""
+                        detected_instructions = self.client.llm_run(system_message, user_prompt)
+                        injection_completion_mark, messages, openai_messages = self.injection_isolate(
+                            detected_instructions, messages, openai_messages, msg_index=msg_index
+                        )
                 
         # thought-calling
         self.logger.info("Tool Reasoning ...")
